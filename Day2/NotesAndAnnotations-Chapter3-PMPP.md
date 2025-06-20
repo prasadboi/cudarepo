@@ -48,20 +48,18 @@ Objectives
 ## colorToGrayscaleConversion
 
 ```CPP
+// P[row, col] = sum(M[row,k] * N[k, col]) for k = 0,1,2...,width-1
 __global__
-void colortoGrayscaleConversion(unsigned char* Picture_out, unsigned char* Picture_in, int width, int height)
-{
-	int column = blockIdx.x * blockDim.x + threadIdx.x;
-	int row = blockIdx.y * blockDim.y + threadIdx.y;
-
-	if ((column < width) and (row < height)){
-		// get the 1D offset of the pixel using row-major translation
-		int img_offset = row*width + column; // img offset assuming only 1 channel // also the offset in the case of the grayscale img
-		int multi_channel_img_offset = CHANNEL*img_offset; // RGB image will have CHANNEL times more columns than a 1 channel img (i.e. grayscale)
-		unsigned char r = Picture_in[img_offset*CHANNEL];
-		unsigned char g = Picture_in[img_offset*CHANNEL+1];
-		unsigned char b = Picture_in[img_offset*CHANNEL+2];
-		Picture_out[img_offset] = 0.21f*r + 0.71f*g + 0.07f*b;
+void MatrixMulKernel(float* M, float* N, float* P, int h1, int w1, int h2, int w2){
+	// note that w1 must be equal to w2
+	int row = blockIdx.x * blockDim.x + threadIdx.x;
+	int col = blockIdx.y * blockDim.y + threadIdx.y;
+	if((row < h1) and (col < w2)){
+		float value = 0.0;
+		for(int k = 0; k < w1; k++){
+			value += (M[row*w1 + k] * N[k*w2 + col]); // note the way the row major format is being applied to fetch the matrix values
+		}
+		P[row*w2 + col] = value;
 	}
 }
 ```
