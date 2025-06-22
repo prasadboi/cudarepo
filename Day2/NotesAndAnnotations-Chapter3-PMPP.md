@@ -15,7 +15,7 @@
     ```
 
     This example generates a 1D grdi that consists fo 32 blocks, each of which consists of 128 threads. The total number of threads in the grid is 128\*32 = 4096
-  - dimBlock and dimGrdi are host code var.s that are defined by the programmers. These variables can have any legal C variable name as long as they have the type dim3.
+  - dimBlock and dimGrid are host code var.s that are defined by the programmers. These variables can have any legal C variable name as long as they have the type dim3.
   - In case we want to dynamically assig the number of blocks based on the length of the
 
     ```C
