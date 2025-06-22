@@ -28,7 +28,9 @@
   - Case1: No data reuse - $N_{op}/N_{byte} = (2N^3 / (2bN^3/8)) = 8/b : OP/byte$
   - Case 2: With ideal data reuse - $N_{op}/N_{byte} = (2N^3 / (3bN^2/8)) = 16N/3b : OP/byte$ - This means reusing data reduces memory access and improves the operation performance. A memory-bound operation could be improved to math-bound operation by optimizing the reuse of data in the implementation.
   - Sometimes, enlarging the size of the operands may also improve the memory-bound operation to math-bound operation. - Looking back at the same N×N matrix multiplication example, assuming the datatype is FP32 (b=32). - $N_{op}/N_{byte}=2N^3/(3bN^2/8)=16N/3b=N/6:OP/byte$
-  - If the operation is performed on [NVIDIA A100 GPU](https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/a100/pdf/nvidia-a100-datasheet.pdf), the math bandwidth is 19.5 TFLOPS and the memory bandwidth for FP32 is 1.6 TB/sec. Therefore, - ${BW}_{math}/{BW}_{mem}=12.2:OP/byte$ - When N>=74, the matrix multiplication operation is math-bound and when N<74, the N×N matrix multiplication is memory-bound.
+  - If the operation is performed on [NVIDIA A100 GPU](https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/a100/pdf/nvidia-a100-datasheet.pdf), the math bandwidth is 19.5 TFLOPS and the memory bandwidth for FP32 is 1.6 TB/sec. Therefore,
+  - $({BW}_{math})/({BW}_{mem}) = 12.2:OP/byte$
+  - When N>=74, the matrix multiplication operation is math-bound and when N<74, the N×N matrix multiplication is memory-bound.
 - "Although for some operations, it is theoretically possible to turn the operation from memory-bound to math-bound by enlarging the size of the operands, because the reusable data size (cache size) on the hardware is limited, for some operations this strategy might not work in practice."
 
 ## References
