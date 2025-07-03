@@ -1,19 +1,50 @@
 #include <iostream>
+#include <math.h>
 using namespace std;
+#define TILE_WIDTH 16
+template<typename T>
+__global__ void matrixMulKernelTiled(T const* M, T const* N, T* P, int h1, int w1, int h2, int w2)
+{
+	__shared__ T M_d_shared[TILE_WIDTH][TILE_WIDTH];
+	__shared__ T N_d_shared[TILE_WIDTH][TILE_WIDTH];
 
-// P[row, col] = sum(M[row,k] * N[k, col]) for k = 0,1,2...,width-1
-__global__
-void MatrixMulKernel(float* M, float* N, float* P, int h1, int w1, int h2, int w2){
-	// note that w1 must be equal to w2
-	int row = blockIdx.x * blockDim.x + threadIdx.x;
-	int col = blockIdx.y * blockDim.y + threadIdx.y;
-	if((row < h1) and (col < w2)){
-		float value = 0.0;
-		for(int k = 0; k < w1; k++){
-			value += (M[row*w1 + k] * N[k*w2 + col]); // note the way the row major format is being applied to fetch the matrix values
+	int row = blockIdx.x*TILE_WIDTH + threadIdx.y;
+	int col = blockIdx.y*TILE_WIDTH + threadIdx.x;
+
+	// assume h1 == w2
+	T value = 0;
+    int numTiles = (w1 + TILE_WIDTH - 1)/TILE_WIDTH;
+	for(size_t ph = 0; ph < numTiles; ++ph)
+	{
+		// load the M and N tiles into shared memory
+		M_d_shared[threadIdx.y][threadIdx.x] = M[row*w1 + ph*TILE_WIDTH + threadIdx.x];
+		N_d_shared[threadIdx.y][threadIdx.x] = N[(ph*TILE_WIDTH + threadIdx.y)*h2 + col];
+		__syncthreads();
+		for(size_t k = 0; k < TILE_WIDTH; k++)
+		{
+			value += (M_d_shared[threadIdx.y][k]*N_d_shared[k][threadIdx.x]);
 		}
-		P[row*w2 + col] = value;
+		__syncthreads();
 	}
+	P[row*w2 + col] = value;
+}
+
+template<typename T>
+__host__
+void launch_GMEM_kernel(int kernel_type, T const* M, T const* N, T* P, size_t h1, size_t w1, size_t h2, size_t w2)
+{
+    dim3 blockDim(TILE_WIDTH, TILE_WIDTH);
+    dim3 gridDim((w2 + TILE_WIDTH - 1) / TILE_WIDTH, (h1 + TILE_WIDTH - 1) / TILE_WIDTH) ;
+    switch (kernel_type)
+    {
+    case 1:
+        matrixMulKernelTiled<T><<<gridDim, blockDim>>>(M, N, P, h1, w1, h2, w2);
+        break;
+    
+    default:
+        cout<<"unidentified kernel launch type. No execution.\n";
+        break;
+    }
 }
 
 __host__
@@ -64,13 +95,7 @@ int main() {
     cudaMemcpy(M_d, M_h, h1 * w1 * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(N_d, N_h, h2 * w2 * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Kernel launch parameters
-    dim3 blockDim(16, 16);
-    // note how the grid dims are being calculated!!!
-    dim3 gridDim((h1 + blockDim.x - 1) / blockDim.x, (w2 + blockDim.y - 1) / blockDim.y);
-
-    // Launch kernel
-    MatrixMulKernel<<<gridDim, blockDim>>>(M_d, N_d, P_d, h1, w1, h2, w2);
+    launch_GMEM_kernel<float>(1, M_d, N_d, P_d, h1, w1, h2, w2);
     cudaDeviceSynchronize();
 
     cudaMemcpy(P_h, P_d, h1 * w2 * sizeof(float), cudaMemcpyDeviceToHost);

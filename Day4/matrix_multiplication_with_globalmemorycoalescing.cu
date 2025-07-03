@@ -1,19 +1,43 @@
 #include <iostream>
+#include <math.h>
 using namespace std;
-
-// P[row, col] = sum(M[row,k] * N[k, col]) for k = 0,1,2...,width-1
+#define BLOCKSIZE 16
+// FIXING THE ISSUE OF NON COALESCED MEMORY ACCESS with the naive implementation
+// also added good coding practices by referencing Lei Mao's Blog
+template<typename T>
 __global__
-void MatrixMulKernel(float* M, float* N, float* P, int h1, int w1, int h2, int w2){
-	// note that w1 must be equal to w2
-	int row = blockIdx.x * blockDim.x + threadIdx.x;
-	int col = blockIdx.y * blockDim.y + threadIdx.y;
-	if((row < h1) and (col < w2)){
-		float value = 0.0;
-		for(int k = 0; k < w1; k++){
-			value += (M[row*w1 + k] * N[k*w2 + col]); // note the way the row major format is being applied to fetch the matrix values
-		}
-		P[row*w2 + col] = value;
-	}
+void matrixMulGlobalMemCoalesce(T const* M, T const* N, T* P, size_t h1, size_t w1, size_t h2, size_t w2){
+	// row and column of C that current thread is working on
+    size_t const row_idx = blockIdx.x * BLOCKSIZE + (threadIdx.x / BLOCKSIZE);
+    size_t const col_idx = blockIdx.y * BLOCKSIZE + (threadIdx.x % BLOCKSIZE);
+
+    if((row_idx < h1) and (col_idx < w2)){
+        T val = 0;
+        for(size_t k = 0; k < w1; ++k)
+        {
+            val += (M[row_idx*w1 + k]*N[k*w2 + col_idx]);
+            
+        }
+        P[row_idx*w1 + col_idx] = val;
+    }
+}
+
+template<typename T>
+__host__
+void launch_GMEM_kernel(int kernel_type, T const* M, T const* N, T* P, size_t h1, size_t w1, size_t h2, size_t w2)
+{
+    dim3 blockDim(BLOCKSIZE, BLOCKSIZE);
+    dim3 gridDim(ceil(((float)h1)/((float)blockDim.x)), ceil(((float)w2)/((float)blockDim.y)));
+    switch (kernel_type)
+    {
+    case 1:
+        matrixMulGlobalMemCoalesce<T><<<gridDim, blockDim>>>(M, N, P, h1, w1, h2, w2);
+        break;
+    
+    default:
+        cout<<"unidentified kernel launch type. No execution.\n";
+        break;
+    }
 }
 
 __host__
@@ -64,13 +88,7 @@ int main() {
     cudaMemcpy(M_d, M_h, h1 * w1 * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(N_d, N_h, h2 * w2 * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Kernel launch parameters
-    dim3 blockDim(16, 16);
-    // note how the grid dims are being calculated!!!
-    dim3 gridDim((h1 + blockDim.x - 1) / blockDim.x, (w2 + blockDim.y - 1) / blockDim.y);
-
-    // Launch kernel
-    MatrixMulKernel<<<gridDim, blockDim>>>(M_d, N_d, P_d, h1, w1, h2, w2);
+    launch_GMEM_kernel<float>(1, M_d, N_d, P_d, h1, w1, h2, w2);
     cudaDeviceSynchronize();
 
     cudaMemcpy(P_h, P_d, h1 * w2 * sizeof(float), cudaMemcpyDeviceToHost);
