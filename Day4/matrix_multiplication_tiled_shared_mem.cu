@@ -8,8 +8,8 @@ __global__ void matrixMulKernelTiled(T const* M, T const* N, T* P, int h1, int w
 	__shared__ T M_d_shared[TILE_WIDTH][TILE_WIDTH];
 	__shared__ T N_d_shared[TILE_WIDTH][TILE_WIDTH];
 
-	int row = blockIdx.x*TILE_WIDTH + threadIdx.y;
-	int col = blockIdx.y*TILE_WIDTH + threadIdx.x;
+	int row = blockIdx.y*TILE_WIDTH + threadIdx.y;
+	int col = blockIdx.x*TILE_WIDTH + threadIdx.x;
 
 	// assume h1 == w2
 	T value = 0;
@@ -17,8 +17,16 @@ __global__ void matrixMulKernelTiled(T const* M, T const* N, T* P, int h1, int w
 	for(size_t ph = 0; ph < numTiles; ++ph)
 	{
 		// load the M and N tiles into shared memory
-		M_d_shared[threadIdx.y][threadIdx.x] = M[row*w1 + ph*TILE_WIDTH + threadIdx.x];
-		N_d_shared[threadIdx.y][threadIdx.x] = N[(ph*TILE_WIDTH + threadIdx.y)*h2 + col];
+		if ((row < h1) and ((ph*TILE_WIDTH + threadIdx.x) < w1))
+			M_d_shared[threadIdx.y][threadIdx.x] = M[row*w1 + ph*TILE_WIDTH + threadIdx.x];
+		else
+			M_d_shared[threadIdx.y][threadIdx.x] = 0.0f;
+			
+		if (((ph*TILE_WIDTH + threadIdx.y) < h2) and (col < w2))
+			N_d_shared[threadIdx.y][threadIdx.x] = N[(ph*TILE_WIDTH + threadIdx.y)*w2 + col];
+		else
+			N_d_shared[threadIdx.y][threadIdx.x] = 0.0f;
+			
 		__syncthreads();
 		for(size_t k = 0; k < TILE_WIDTH; k++)
 		{
@@ -26,7 +34,8 @@ __global__ void matrixMulKernelTiled(T const* M, T const* N, T* P, int h1, int w
 		}
 		__syncthreads();
 	}
-	P[row*w2 + col] = value;
+	if((row < h1) and (col < w2))
+		P[row*w2 + col] = value;
 }
 
 template<typename T>
@@ -64,8 +73,8 @@ void MatrixMul(float* M, float* N, float* P, int h1, int w1, int h2, int w2)
 int main() {
     // Matrix dimensions
     const int h1 = 16;
-    const int w1 = 16;
-    const int h2 = 16;
+    const int w1 = 32;
+    const int h2 = 32;
     const int w2 = 16;
 
     if (w1 != h2) {
@@ -100,24 +109,27 @@ int main() {
 
     cudaMemcpy(P_h, P_d, h1 * w2 * sizeof(float), cudaMemcpyDeviceToHost);
 
-    // Print a small part of the result
-    cout << "Kernel function output (first 5x5 block):" << endl;
-    for (int i = 0; i < 5 && i < h1; ++i) {
-        for (int j = 0; j < 5 && j < w2; ++j) {
-            cout << P_h[i * w2 + j] << " ";
+    // checking if the output of the GPU kernel matches the actual expected output
+    // getting accurate results from the naive, single thread matrix multiplication program
+    MatrixMul(M_h, N_h, P_test_h, h1, w1, h2, w2);
+    // Compare outputs only on the host (driver) thread
+    bool correct = true;
+    for(size_t i = 0; i < h1; i++)
+    {
+        for(size_t j = 0; j < w2; j++)
+        {
+            if(fabs(P_h[i*w2 + j] - P_test_h[i*w2 + j]) > 1e-4)
+            {
+                cout << "Mismatch at (" << i << "," << j << "): "
+                     << "GPU=" << P_h[i*w2 + j] << ", CPU=" << P_test_h[i*w2 + j] << endl;
+                correct = false;
+            }
         }
-        cout << endl;
     }
-    cout<< "------------------------" << endl;
-    MatrixMul(M_h, N_h, P_test_h, h1, w1, h2, w2); // CPU version for testing
-    cout << "Ideal output (first 5x5 block):" << endl;
-    for (int i = 0; i < 5 && i < h1; ++i) {
-        for (int j = 0; j < 5 && j < w2; ++j) {
-            cout << P_test_h[i * w2 + j] << " ";
-        }
-        cout << endl;
-    }
-    cout<< "------------------------" << endl;
+    if (correct)
+        cout << "GPU Kernel output matches CPU output." << endl;
+    else
+        cout << "GPU Kernel provides wrong output!!!" << endl;
     // Cleanup
     delete[] M_h;
     delete[] N_h;
