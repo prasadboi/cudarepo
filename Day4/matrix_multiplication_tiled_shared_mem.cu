@@ -73,8 +73,8 @@ void MatrixMul(float* M, float* N, float* P, int h1, int w1, int h2, int w2)
 int main() {
     // Matrix dimensions
     const int h1 = 16;
-    const int w1 = 32;
-    const int h2 = 32;
+    const int w1 = 37;
+    const int h2 = 37;
     const int w2 = 16;
 
     if (w1 != h2) {
@@ -140,3 +140,28 @@ int main() {
 
     return 0;
 }
+
+// nvprof ./matrix_mul_tiled_shared
+/*
+==124858== NVPROF is profiling process 124858, command: ./matrix_mul_tiled_shared
+GPU Kernel output matches CPU output.
+==124858== Profiling application: ./matrix_mul_tiled_shared
+==124858== Profiling result:
+            Type  Time(%)      Time     Calls       Avg       Min       Max  Name
+ GPU activities:   52.13%  3.1360us         1  3.1360us  3.1360us  3.1360us  void matrixMulKernelTiled<float>(float const *, float const *, float*, int, int, int, int)
+                   27.13%  1.6320us         1  1.6320us  1.6320us  1.6320us  [CUDA memcpy DtoH]
+                   20.74%  1.2480us         2     624ns     480ns     768ns  [CUDA memcpy HtoD]
+      API calls:   98.99%  82.418ms         3  27.473ms  2.3650us  82.411ms  cudaMalloc
+                    0.46%  380.55us         3  126.85us  19.817us  340.60us  cudaMemcpy
+                    0.21%  173.51us       114  1.5220us     120ns  69.801us  cuDeviceGetAttribute
+                    0.19%  160.10us         1  160.10us  160.10us  160.10us  cudaLaunchKernel
+                    0.10%  87.163us         3  29.054us  2.6950us  79.329us  cudaFree
+                    0.03%  21.490us         1  21.490us  21.490us  21.490us  cuDeviceGetName
+                    0.01%  9.8790us         1  9.8790us  9.8790us  9.8790us  cudaDeviceSynchronize
+                    0.01%  6.6130us         1  6.6130us  6.6130us  6.6130us  cuDeviceGetPCIBusId
+                    0.00%  1.9320us         3     644ns     170ns  1.4520us  cuDeviceGetCount
+                    0.00%     411ns         2     205ns     120ns     291ns  cuDeviceGet
+                    0.00%     271ns         1     271ns     271ns     271ns  cuDeviceTotalMem
+                    0.00%     220ns         1     220ns     220ns     220ns  cuModuleGetLoadingMode
+                    0.00%     171ns         1     171ns     171ns     171ns  cuDeviceGetUuid
+*/ 
